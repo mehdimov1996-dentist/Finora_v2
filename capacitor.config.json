@@ -1,0 +1,7 @@
+{
+  "appId": "com.finora.app",
+  "appName": "Finora",
+  "webDir": "www",
+  "backgroundColor": "#0b0d12",
+  "server": { "androidScheme": "https" }
+}
