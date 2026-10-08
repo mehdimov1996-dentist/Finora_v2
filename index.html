@@ -14,25 +14,22 @@
 <body>
 <div class="app">
   <header class="top">
-    <div><div class="logo">FINORA</div><div class="sub">دفترچه مدیریت مالی شخصی + سرمایه‌گذاری</div></div>
-    <button class="btn" data-act="live">↻ بازار</button>
+    <div><div class="logo">FINORA</div><div class="sub" id="psub"></div></div>
+    <div class="actions" style="margin:0"><button class="btn" id="menuBtn" data-act="menu" hidden>☰ منو</button><button class="btn" data-act="live">↻ بازار</button></div>
   </header>
-  <div class="monthbar">
+  <div id="alerts"></div>
+  <div class="monthbar" id="monthbar" hidden>
     <button class="btn" data-act="mprev">ماه قبل</button>
     <span id="mlabel"></span>
     <button class="btn" data-act="mnext">ماه بعد</button>
   </div>
-  <nav class="nav">
-    <button class="active" data-p="home">🏠 خانه</button>
-    <button data-p="wallet">💳 کیف پول</button>
-    <button data-p="invest">📈 سرمایه‌گذاری</button>
-    <button data-p="analysis">📊 تحلیل</button>
-    <button data-p="settings">⚙️ تنظیمات</button>
-  </nav>
-  <section id="home" class="page active"></section>
+  <section id="menu" class="page active"></section>
+  <section id="home" class="page"></section>
   <section id="wallet" class="page"></section>
   <section id="invest" class="page"></section>
+  <section id="journal" class="page"></section>
   <section id="analysis" class="page"></section>
+  <section id="todo" class="page"></section>
   <section id="settings" class="page"></section>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>

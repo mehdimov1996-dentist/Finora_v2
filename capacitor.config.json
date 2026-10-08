@@ -3,5 +3,12 @@
   "appName": "Finora",
   "webDir": "www",
   "backgroundColor": "#0b0d12",
-  "server": { "androidScheme": "https" }
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
 }

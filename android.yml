@@ -26,6 +26,20 @@ jobs:
       - name: Add Android platform (first run only)
         run: '[ -d android ] || npx cap add android'
 
+      - name: Add notification permissions to AndroidManifest
+        run: |
+          python3 - <<'PY'
+          import re
+          p='android/app/src/main/AndroidManifest.xml'
+          s=open(p,encoding='utf8').read()
+          perms=['POST_NOTIFICATIONS','SCHEDULE_EXACT_ALARM','RECEIVE_BOOT_COMPLETED','VIBRATE']
+          add=''.join('    <uses-permission android:name="android.permission.%s" />\n'%x for x in perms if 'android.permission.%s"'%x not in s)
+          if add:
+              s=s.replace('<application',add+'    <application',1)
+              open(p,'w',encoding='utf8').write(s)
+          print(s)
+          PY
+
       - name: Generate app icons
         run: npx capacitor-assets generate --android
         continue-on-error: true
