@@ -7,7 +7,7 @@ const INCOME_TYPES=['درآمد دندانپزشکی','حقوق','درآمد ج�
 const DESTS=['سرمایه در گردش','دارایی امن'];
 const ACCS=[
  {id:'bourse',name:'بورس (الفا)',color:'#5ba7ff',unit:'تومان'},
- {id:'goldlord',name:'طلا (لورد)',color:'#e7b84b',unit:'تومان'},
+ {id:'goldlord',name:'طلا (لورد)',color:'#e7b84b',unit:'دلار'},
  {id:'goldsig',name:'طلا (Signal AI)',color:'#ff9f5b',unit:'تومان'},
  {id:'cryptosig',name:'کریپتو (Signal AI)',color:'#35d07f',unit:'USDT'}];
 const ACC=Object.fromEntries(ACCS.map(a=>[a.id,a]));
@@ -73,7 +73,7 @@ function parseJ(s){
 }
 
 /* ---------- state ---------- */
-const fresh=()=>({wallet:{income:[],expense:[],transfer:[],budget:[]},invest:{safe:{asset:'BTC',current:0,target:2},assets:[]},journal:[],flows:[],safeLog:[],jUnits:{},acats:[],notes:[],todos:[],month:curMonth()});
+const fresh=()=>({wallet:{income:[],expense:[],transfer:[],budget:[]},invest:{safe:{asset:'BTC',current:0,target:2},assets:[]},journal:[],flows:[],safeLog:[],jUnits:{},acats:[],notes:[],todos:[],gl:{goal:0,rules:'',days:{},over:{}},month:curMonth()});
 const srcId=v=>str(v).replace(/[^\w-]/g,'').slice(0,30);
 const newNid=()=>1+Math.floor(Math.random()*2147000000);
 const SYM_RE={binance:/^[A-Z0-9]{3,20}$/,other:/^[\w.\-:@]{1,40}$/};
@@ -92,9 +92,12 @@ function normalize(x){
   const s=iv.safe||{};
   f.invest.safe={asset:str(s.asset)||'BTC',current:n(s.current),target:n(s.target)};
   f.invest.assets=arr(iv.assets).map(o=>({id:sid(o),name:str(o.name),symbol:str(o.symbol),type:str(o.type),qty:n(o.qty),price:n(o.price)}));
+  const g0=x.gl&&typeof x.gl==='object'?x.gl:{},mk_=k=>/^\d{4}-\d{2}$/.test(k),pickMap=(o,f2)=>{const r={};if(o&&typeof o==='object')Object.keys(o).slice(0,400).forEach(k=>{const v=f2(o[k]);if(v!==undefined)r[k]=v});return r};
+  f.gl={goal:Math.max(0,n(g0.goal)),rules:str(g0.rules).slice(0,3000),days:pickMap(g0.days,v=>n(v)>0&&n(v)<=31?Math.round(n(v)):undefined),over:pickMap(g0.over,v=>v===true?true:undefined)};
+  Object.keys(f.gl.days).forEach(k=>{if(!mk_(k))delete f.gl.days[k]});Object.keys(f.gl.over).forEach(k=>{if(!ISO_RE.test(k))delete f.gl.over[k]});
   const jr=Array.isArray(x.journal)?arr(x.journal):arr(iv.trades); // old backups kept trades under invest
   const ju=x.jUnits&&typeof x.jUnits==='object'?x.jUnits:{};
-  f.jUnits=Object.fromEntries(ACCS.map(a=>[a.id,UNITS.includes(str(ju[a.id]))?str(ju[a.id]):(a.id==='cryptosig'&&!x.jUnits&&UNITS.includes(str(x.jUnit))?str(x.jUnit):a.unit)]));
+  f.jUnits=Object.fromEntries(ACCS.map(a=>[a.id,a.id==='goldlord'?'دلار':UNITS.includes(str(ju[a.id]))?str(ju[a.id]):(a.id==='cryptosig'&&!x.jUnits&&UNITS.includes(str(x.jUnit))?str(x.jUnit):a.unit)]));
   f.journal=jr.map(o=>({id:sid(o),acc:ACC[o.acc]?o.acc:'cryptosig',symbol:str(o.symbol),side:o.side==='short'?'short':'long',status:o.status==='closed'?'closed':'open',entry:n(o.entry),exit:n(o.exit),size:n(o.size),sl:n(o.sl),tp:n(o.tp),pnl:n(o.pnl),setup:str(o.setup),note:str(o.note),date:dt(o.date),src:srcId(o.src),psym:str(o.psym).trim().slice(0,40),hit:['tp','sl'].includes(o.hit)?o.hit:''}));
   f.flows=arr(x.flows).filter(o=>ACC[o.acc]).map(o=>({id:sid(o),acc:o.acc,date:dt(o.date),amount:n(o.amount),kind:['deposit','withdraw','safe'].includes(o.kind)?o.kind:(n(o.amount)<0?'withdraw':'deposit'),note:str(o.note),ref:str(o.ref).replace(/[^\w-]/g,'')}));
   f.safeLog=arr(x.safeLog).filter(o=>ACC[o.acc]).map(o=>({id:sid(o),acc:o.acc,date:dt(o.date),amount:n(o.amount),unit:str(o.unit),price:n(o.price),qty:n(o.qty),asset:str(o.asset),note:str(o.note)}));
@@ -205,10 +208,17 @@ function renderInvest(){
 <div class="card"><h2>➕ دارایی</h2><form class="form" data-form="asset"><div><label>نام</label><input name="name" required placeholder="طلای ۱۸"></div><div><label>نماد</label><input name="symbol" required placeholder="GERAM18"></div><div><label>دسته</label><select name="type"><option>کریپتو</option><option>طلا</option><option>ارز</option><option>بورس</option><option>نفت</option><option>سایر</option></select></div><div><label>مقدار</label><input name="qty" type="number" step="any" min="0" value="0"></div><div><label>قیمت (تومان)</label><input name="price" type="number" step="any" min="0" value="0"></div><div><button class="btn primary">افزودن</button></div></form></div></div>
 <div class="card section"><h2>💰 دارایی‌ها</h2>${a.length?`<table class="table"><tr><th>نام</th><th>دسته</th><th>مقدار</th><th>قیمت</th><th>ارزش</th><th></th></tr>${a.map(x=>`<tr><td>${esc(x.name)}<span class="mini"> ${esc(x.symbol)}</span></td><td>${esc(x.type)}</td><td>${fmt(x.qty)}</td><td>${money(x.price)}</td><td>${money(x.qty*x.price)}</td><td><button class="btn danger" data-act="delAsset" data-id="${esc(x.id)}">×</button></td></tr>`).join('')}</table>`:'<div class="empty">دارایی ثبت نشده</div>'}</div>`;
 }
+const PRESETS={
+  gold:{name:'طلا (BrsApi)',url:'https://brsapi.ir/Api/Market/Gold_Currency.php?key={key}',path:'gold[symbol={symbol}].price',mult:'1',test:'IR_GOLD_18K',
+    note:'قالب BrsApi: کلید رایگان را از brsapi.ir بگیرید و در «مقدار کلید» بگذارید. نماد: IR_GOLD_18K (طلای ۱۸ عیار) یا IR_GOLD_MELTED (آبشده). با «تست» واحد قیمت را ببینید؛ اگر ریال بود ضریب را ۰٫۱ کنید.'},
+  tse:{name:'سهام بورس (TSETMC)',url:'https://cdn.tsetmc.com/api/ClosingPrice/GetClosingPriceInfo/{symbol}',path:'closingPriceInfo.pDrCotVal',mult:'0.1',test:'',
+    note:'قالب TSETMC (بدون کلید): نماد در این منبع «کد ۱۷ رقمی نماد» است؛ با «جستجوی نماد بورس» پیدایش کنید. مسیر = قیمت آخرین معامله؛ برای قیمت پایانی بگذارید closingPriceInfo.pClosing. ضریب ۰٫۱ ریال را به تومان تبدیل می‌کند.'}
+};
 function srcCard(){
   const host=u=>{try{return new URL(u.split('{symbol}').join('X')).host}catch(e){return''}};
   const list=`<div class="row todo" style="margin-top:6px"><span><b>Binance</b><div class="mini" dir="ltr">api.binance.com · پیش‌فرض (نماد مثل BTCUSDT)</div></span></div>`+SRC.map(s=>`<div class="row todo" style="margin-top:6px"><span><b>${esc(s.name)}</b><div class="mini" dir="ltr">${esc(host(s.url))}${s.path?' · '+esc(s.path):''}${s.mult!==1?' · ×'+s.mult:''}</div></span><button class="btn danger" data-act="srcdel" data-id="${esc(s.id)}">×</button></div>`).join('');
-  return list+`<form class="form" data-form="srcadd" style="margin-top:10px"><div><label>نام منبع</label><input name="name" required maxlength="40" placeholder="مثلاً قیمت طلا"></div><div><label>مسیر مقدار در JSON</label><input name="path" dir="ltr" placeholder="data.price یا data[0].price"></div><div class="full"><label>آدرس (https) — جای نماد: {symbol}</label><input name="url" dir="ltr" required placeholder="https://api.example.com/price?symbol={symbol}"></div><div><label>نام هدر کلید (اختیاری)</label><input name="hName" dir="ltr" placeholder="x-api-key"></div><div><label>مقدار هدر / کلید</label><input name="hVal" type="password" dir="ltr" autocomplete="off"></div><div><label>ضریب (مثلاً ۰٫۱ برای ریال ← تومان)</label><input name="mult" type="number" step="any" min="0" value="1"></div><div><label>نماد تست</label><input name="test" dir="ltr" placeholder="XAUUSD"></div><div class="full actions"><button class="btn primary">افزودن منبع</button><button type="button" class="btn" data-act="srctest">تست</button></div></form><p class="mini">پاسخ API باید JSON باشد و «مسیر مقدار» به عدد قیمت اشاره کند (بدون مسیر، کل پاسخ عدد فرض می‌شود). اگر کلید لازم دارد، داخل آدرس یا هدر بگذارید. کلیدها فقط روی همین دستگاه می‌مانند و در Backup نیستند. در مرورگر ممکن است سرویس به‌خاطر CORS جواب ندهد؛ در APK این محدودیت نیست. بعد از افزودن، منبع در فرم معامله و دسته‌های تحلیل انتخاب‌شدنی است.</p>`;
+  const presets=`<div class="mini" style="margin-top:10px">قالب آماده (فرم زیر را پر می‌کند؛ بعد «تست» و «افزودن»):</div><div class="actions"><button class="btn" data-act="srcpreset" data-preset="gold">🥇 طلای ۱۸ عیار / آبشده</button><button class="btn" data-act="srcpreset" data-preset="tse">📈 سهام بورس</button></div>`;
+  return list+presets+`<form class="form" data-form="srcadd" style="margin-top:10px"><div><label>نام منبع</label><input name="name" required maxlength="40" placeholder="مثلاً قیمت طلا"></div><div><label>مسیر مقدار در JSON (از [فیلد=مقدار] و {symbol} هم می‌شود)</label><input name="path" dir="ltr" placeholder="data.price یا items[symbol={symbol}].price"></div><div class="full"><label>آدرس (https) — {symbol} = نماد، {key} = کلید</label><input name="url" dir="ltr" required placeholder="https://api.example.com/price?symbol={symbol}"></div><div><label>نام هدر کلید (اختیاری)</label><input name="hName" dir="ltr" placeholder="x-api-key"></div><div><label>مقدار کلید (برای هدر یا {key})</label><input name="hVal" type="password" dir="ltr" autocomplete="off"></div><div><label>ضریب (مثلاً ۰٫۱ برای ریال ← تومان)</label><input name="mult" type="number" step="any" min="0" value="1"></div><div><label>نماد تست</label><input name="test" dir="ltr" placeholder="XAUUSD"></div><div class="full actions"><button class="btn primary">افزودن منبع</button><button type="button" class="btn" data-act="srctest">تست</button></div><div class="full tnote" id="srcOut" style="min-height:0"></div></form><p class="mini">پاسخ API باید JSON باشد و «مسیر مقدار» به عدد قیمت اشاره کند (بدون مسیر، کل پاسخ عدد فرض می‌شود). اگر کلید لازم دارد، داخل آدرس یا هدر بگذارید. کلیدها فقط روی همین دستگاه می‌مانند و در Backup نیستند. در مرورگر ممکن است سرویس به‌خاطر CORS جواب ندهد؛ در APK این محدودیت نیست. بعد از افزودن، منبع در فرم معامله و دسته‌های تحلیل انتخاب‌شدنی است. اگر آدرس و مسیر هیچ‌کدام {symbol} نداشته باشند، منبع یک ابزار ثابت است و نماد لازم ندارد.</p><div class="card" style="margin-top:10px"><h2 style="font-size:14px">🔎 جستجوی نماد بورس (TSETMC)</h2><div class="form"><div class="full"><label>بخشی از نام نماد (مثلاً فولاد)</label><input id="tseq" autocomplete="off"></div><div class="full"><button class="btn" data-act="tsesearch">جستجو</button></div></div><div id="tseOut" class="actions" style="margin-top:8px"></div><div class="mini">روی نتیجه بزنید تا کد نماد کپی شود؛ آن کد را در فرم معامله یا دسته‌ی تحلیل در «نماد در منبع» بگذارید.</div></div>`;
 }
 function srcFromForm(f,forTest){
   const name=str(f.get('name')).trim().slice(0,40),url=str(f.get('url')).trim();
@@ -252,10 +262,55 @@ const srcOk=id=>id==='binance'||SRC.some(s=>s.id===id);
 const qkey=(src,sym)=>src+':'+sym;
 const symOk=(src,sym)=>(src==='binance'?SYM_RE.binance:SYM_RE.other).test(sym);
 const srcOpts=(cur,none)=>(none?[['',none]]:[]).concat([['binance','Binance'],...SRC.map(s=>[s.id,s.name])]).map(o=>`<option value="${esc(o[0])}"${o[0]===cur?' selected':''}>${esc(o[1])}</option>`).join('');
-const tsym=t=>{const s=str(t.psym||t.symbol).trim();return t.src==='binance'?s.toUpperCase().replace(/[\/\-_\s]/g,''):(t.psym?s:s.replace(/[\/\-_\s]/g,''))};
+const tsym=t=>{if(srcFixed(t.src))return'_';const s=str(t.psym||t.symbol).trim();return t.src==='binance'?s.toUpperCase().replace(/[\/\-_\s]/g,''):(t.psym?s:s.replace(/[\/\-_\s]/g,''))};
 const tquote=t=>{const q=t.src&&QUOTES[qkey(t.src,tsym(t))];return q&&q.p>0?q:null};
+// path steps: key | [index] | [field=value] (first array item whose field equals value). {symbol} is substituted before.
 function getPath(o,path){
-  return path.replace(/\[(\d+)\]/g,'.$1').split('.').filter(Boolean).reduce((v,k)=>v!=null&&typeof v==='object'&&Object.prototype.hasOwnProperty.call(v,k)?v[k]:undefined,o);
+  const re=/\[(\d+)\]|\[([^\]=]+)=([^\]]*)\]|([^.\[\]]+)/g;let m,v=o;
+  while((m=re.exec(path))!==null){
+    if(v==null||typeof v!=='object')return undefined;
+    if(m[1]!==undefined)v=Array.isArray(v)?v[+m[1]]:undefined;
+    else if(m[2]!==undefined)v=Array.isArray(v)?v.find(e=>e&&typeof e==='object'&&String(e[m[2]])===m[3]):undefined;
+    else v=Object.prototype.hasOwnProperty.call(v,m[4])?v[m[4]]:undefined;
+  }
+  return v;
+}
+const usesSym=c=>c.url.includes('{symbol}')||c.path.includes('{symbol}');
+const srcFixed=id=>{const c=id!=='binance'&&SRC.find(x=>x.id===id);return!!c&&!usesSym(c)}; // one fixed instrument: no symbol needed
+function shapeOf(j){
+  const keys=o=>Object.keys(o).slice(0,12).join(', ');
+  if(Array.isArray(j))return'پاسخ یک آرایه‌ی '+j.length+' عضوی است'+(j[0]&&typeof j[0]==='object'?'؛ کلیدهای هر عضو: '+keys(j[0]):'');
+  if(j&&typeof j==='object'){
+    let r='کلیدهای پاسخ: '+keys(j);
+    Object.keys(j).slice(0,6).forEach(k=>{const v=j[k];if(Array.isArray(v)&&v[0]&&typeof v[0]==='object')r+=` | ${k}[] ← ${keys(v[0])}`;else if(v&&typeof v==='object')r+=` | ${k} ← ${keys(v)}`});
+    return r;
+  }
+  return'پاسخ: '+String(j).slice(0,80);
+}
+function buildReq(c,sym){
+  const url=c.url.split('{symbol}').join(encodeURIComponent(sym)).split('{key}').join(encodeURIComponent(c.hVal||''));
+  const headers={};if(c.hName&&/^[\w-]{1,40}$/.test(c.hName))headers[c.hName]=c.hVal;
+  return{url,headers};
+}
+// one request + a precise reason when it fails (used by the Test button; fetchQ uses only .p)
+async function probeSrc(c,sym){
+  if(c.url.includes('{key}')&&!c.hVal)return{p:0,msg:'کلید API وارد نشده است (آدرس شامل {key} است)'};
+  const {url,headers}=buildReq(c,sym);let r;
+  const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),10000);
+  try{r=await fetch(url,{signal:ctl.signal,headers})}
+  catch(e){return{p:0,msg:e&&e.name==='AbortError'?'پاسخی نیامد (زمان تمام شد)':'اتصال برقرار نشد؛ شبکه/فیلتر یا (در مرورگر) محدودیت CORS. در APK این محدودیت CORS نیست.'}}
+  finally{clearTimeout(t)}
+  if(!r.ok)return{p:0,msg:'پاسخ HTTP '+r.status+(r.status===401||r.status===403?' — کلید نامعتبر یا دسترسی بسته است':r.status===429?' — تعداد درخواست زیاد است':'')};
+  const txt=await r.text();let v;
+  if(c.path){
+    let j;try{j=JSON.parse(txt)}catch(e){return{p:0,msg:'پاسخ JSON نیست: '+txt.replace(/\s+/g,' ').slice(0,100)}}
+    const pth=c.path.split('{symbol}').join(sym);v=getPath(j,pth);
+    if(v===undefined)return{p:0,msg:'مسیر «'+pth+'» در پاسخ پیدا نشد. '+shapeOf(j)};
+  }else{try{v=JSON.parse(txt)}catch(e){v=txt}}
+  if(v!==null&&typeof v==='object')return{p:0,msg:'مسیر به یک شیء/آرایه اشاره می‌کند، نه عدد. '+shapeOf(v)};
+  const p=num(v)*(c.mult>0?c.mult:1);
+  if(!(p>0))return{p:0,msg:'مقدار پیدا شد ولی عدد معتبر نیست: «'+String(v).slice(0,40)+'»'};
+  return{p,msg:'',raw:String(v)};
 }
 async function fetchQ(src,sym,cfg){
   const key=qkey(src,sym);
@@ -272,18 +327,8 @@ async function fetchQ(src,sym,cfg){
     return 0;
   }
   const c=cfg||SRC.find(x=>x.id===src);if(!c)return 0;
-  try{
-    const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),10000);
-    const headers={};if(c.hName&&/^[\w-]{1,40}$/.test(c.hName))headers[c.hName]=c.hVal;
-    const r=await fetch(c.url.split('{symbol}').join(encodeURIComponent(sym)),{signal:ctl.signal,headers});clearTimeout(t);
-    if(!r.ok)return 0;
-    const txt=await r.text();let v;
-    if(c.path){let j;try{j=JSON.parse(txt)}catch(e){return 0}v=getPath(j,c.path)}
-    else{try{v=JSON.parse(txt)}catch(e){v=txt}}
-    if(v==null||typeof v==='object')return 0;
-    const p=num(v)*(c.mult>0?c.mult:1);
-    if(p>0){QUOTES[key]={p,t:Date.now()};return p}
-  }catch(e){}
+  const r=await probeSrc(c,sym);
+  if(r.p>0){QUOTES[key]={p:r.p,t:Date.now()};return r.p}
   return 0;
 }
 const fetchSym=sym=>fetchQ('binance',sym);
@@ -364,7 +409,7 @@ function renderAnalysis(){
 function catView(c){
   const ns=S.notes.filter(x=>x.cat===c.id).sort((a,b)=>(a.status==='done')-(b.status==='done')||b.date.localeCompare(a.date)||b.created-a.created);
   const q=catQuote(c),hasAI=!!aiCfg().key;
-  return`<div class="card section"><div class="row"><h2 style="margin:0">${esc(c.name)} ${c.symbol?`<span class="pill" dir="ltr">${esc(c.symbol)}${c.src&&c.src!=='binance'?' · '+esc(srcName(c.src)):''}</span>`:''}</h2><b class="cp" data-cid="${esc(c.id)}" dir="ltr" style="font-size:20px">${chipPrice(c)}</b></div>
+  return`<div class="card section"><div class="row"><h2 style="margin:0">${esc(c.name)} ${c.symbol?`<span class="pill" dir="ltr">${c.symbol==='_'?'':esc(c.symbol)}${c.src&&c.src!=='binance'?(c.symbol==='_'?'':' · ')+esc(srcName(c.src)):''}</span>`:''}</h2><b class="cp" data-cid="${esc(c.id)}" dir="ltr" style="font-size:20px">${chipPrice(c)}</b></div>
 <div class="mini" id="qtime">${q&&q.t?'آخرین به‌روزرسانی '+new Date(q.t).toLocaleTimeString('fa-IR'):''}</div>
 <div class="actions"><button class="btn" data-act="arefresh">↻ قیمت</button><button class="btn" data-act="setManual">قیمت دستی</button><button class="btn" data-act="editCat">ویرایش دسته</button><button class="btn danger" data-act="delCat">حذف دسته</button><button class="btn" data-act="enableNotif">🔔 فعال‌سازی اعلان</button></div>
 <div class="mini" style="margin-top:6px">اعلان فقط وقتی برنامه باز است قیمت را بررسی می‌کند (هر ۳۰ ثانیه).</div></div>
@@ -561,9 +606,9 @@ ${bits.length?`<div class="mini" style="margin-top:6px">${bits.join(' · ')}</di
 <div class="row" style="margin-top:8px"><b class="${t.status==='open'?'':t.pnl>=0?'green':'red'}">${t.status==='open'?'در جریان':am(t.acc,t.pnl)}</b><span>${t.status==='open'?`<button class="btn success" data-act="closeTrade" data-id="${esc(t.id)}">بستن معامله</button> `:''}<button class="btn danger" data-act="delTrade" data-id="${esc(t.id)}">×</button></span></div></div>`;
 }
 function renderJournal(){
-  const tabs=[['cmp','📈 مقایسه'],['trades','🧾 معاملات'],['cap','💰 سرمایه']];
+  const tabs=[['cmp','📈 مقایسه'],['gl','🥇 طلا لورد'],['trades','🧾 معاملات'],['cap','💰 سرمایه']];
   const head=`<div class="seg">${tabs.map(t=>`<button class="${jTab===t[0]?'on':''}" data-act="jtab" data-t="${t[0]}">${t[1]}</button>`).join('')}</div>`;
-  $('journal').innerHTML=head+(jTab==='cmp'?jCmp():jTab==='trades'?jTrades():jCap());
+  $('journal').innerHTML=head+(jTab==='cmp'?jCmp():jTab==='gl'?jGold():jTab==='trades'?jTrades():jCap());
   if(jTab==='cmp')drawReturns('rc');
   if(S.journal.some(t=>t.status==='open'&&t.src))pollQuotes(false);
   if(jTab==='cap')prepSafe();
@@ -596,15 +641,59 @@ function jTrades(){
   return chipH+stats+form+`<div class="card section"><h2>🟢 معاملات باز</h2>${open.length?open.map(t=>tradeCard(t,!one)).join(''):'<div class="empty">معامله‌ی بازی نیست</div>'}</div>
 <div class="card section"><h2>📚 معاملات بسته‌ی این ماه</h2>${hist.length?hist.map(t=>tradeCard(t,!one)).join(''):'<div class="empty">معامله‌ای ثبت نشده</div>'}</div>`;
 }
+
+/* ---------- Gold (Lord): daily USD journal ---------- */
+const WD=['یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه','شنبه'];
+const isoDate=iso=>{const [y,m,d]=iso.split('-').map(Number);return new Date(y,m-1,d)};
+const wdName=iso=>WD[isoDate(iso).getDay()];
+const isWork=iso=>{const k=isoDate(iso).getDay();return k>=1&&k<=5}; // Mon–Fri
+function monthDays(mk){
+  const [y,m]=mk.split('-').map(Number),r=[];
+  for(let d=1;d<=31;d++){const g=j2g(y,m,d),b=g2j(g[0],g[1],g[2]);if(b[1]!==m||b[2]!==d)break;r.push(g[0]+'-'+pad(g[1])+'-'+pad(g[2]))}
+  return r;
+}
+const r2=x=>Math.round(x*100)/100;
+function glModel(mk){
+  const days=monthDays(mk),work=days.filter(isWork),W=S.gl.days[mk]>0?S.gl.days[mk]:work.length;
+  const goal=S.gl.goal,daily=W>0?goal/W:0;
+  const list=S.journal.filter(t=>t.acc==='goldlord'&&t.status==='closed'&&mkey(t.date)===mk);
+  const by={};list.forEach(t=>{(by[t.date]=by[t.date]||{sum:0,list:[]});by[t.date].sum+=t.pnl;by[t.date].list.push(t)});
+  const total=ps(list),t0=todayISO(),cur=mk===curMonth();
+  const remain=cur?work.filter(d=>d>=t0).length:(mk>curMonth()?work.length:0);
+  const before=list.filter(t=>t.date<t0||!cur).reduce((a,t)=>a+t.pnl,0);
+  const need=remain>0?Math.max(0,goal-(cur?before:0))/remain:0;
+  return{days,work,W,goal,daily,by,total,remain,need,left:Math.max(0,goal-total),pct:goal>0?Math.max(0,Math.min(100,total/goal*100)):0};
+}
+const dayReached=(m,iso)=>m.daily>0&&r2((m.by[iso]||{sum:0}).sum)>=r2(m.daily);
+function jGold(){
+  const mk=S.month,m=glModel(mk),t0=todayISO(),cur=mk===curMonth(),A='goldlord',eq=accModel(A).eq;
+  const todayR=cur&&dayReached(m,t0),todaySum=cur?(m.by[t0]||{sum:0}).sum:0;
+  const rules=`<div class="card"><h2>📋 قوانین من</h2><textarea id="glRules" rows="4" placeholder="مثلاً: حداکثر ۴ معامله، بعد از ۲ ضرر پشت سر هم توقف، بدون معامله هنگام خبر…">${esc(S.gl.rules)}</textarea><div class="actions" style="margin-top:8px"><button class="btn primary" data-act="glrules">ذخیره قوانین</button></div></div>`;
+  const goal=`<div class="card section"><h2>🎯 هدف ماه ${esc(monthLabel(mk))}</h2><form class="form" data-form="glgoal"><div><label>هدف ماهانه (دلار)</label><input name="goal" type="number" step="any" min="0" value="${S.gl.goal||''}"></div><div><label>روز کاری این ماه (خالی = خودکار)</label><input name="days" type="number" min="1" max="31" value="${S.gl.days[mk]||''}" placeholder="${fa(m.work.length)}"></div><div class="full"><button class="btn">ذخیره هدف</button></div></form>
+<div class="grid g2" style="margin-top:10px"><div class="card"><div class="label">سهم هر روز کاری</div><div class="big gold" style="font-size:19px">${am(A,r2(m.daily))}</div><div class="mini">${fa(m.W)} روز کاری (دوشنبه تا جمعه)</div></div><div class="card"><div class="label">سود این ماه</div><div class="big ${m.total>=0?'green':'red'}" style="font-size:19px">${am(A,r2(m.total))}</div><div class="mini">مانده تا هدف: ${am(A,r2(m.left))}</div></div></div>
+<div class="progress" style="margin-top:10px"><i style="width:${m.pct}%"></i></div><div class="mini" style="margin-top:4px">${fa(Math.round(m.pct))}٪ از هدف${cur&&m.goal>0?` · با ${fa(m.remain)} روز کاری مانده (از امروز) روزی ${am(A,r2(m.need))} لازم است`:''}</div></div>`;
+  const banner=todayR?`<div style="border:1px solid var(--g);border-radius:12px;padding:10px;margin-bottom:10px"><b class="green">✅ هدف امروز رسید — معاملات امروز تمام شد</b><div class="mini">سود امروز ${am(A,r2(todaySum))} از ${am(A,r2(m.daily))}${S.gl.over[t0]?' · ادامه فعال است':''}</div>${S.gl.over[t0]?'':`<div class="actions" style="margin-top:6px"><button class="btn" data-act="glover" data-d="${t0}">ثبت معامله‌ی بیشتر امروز</button></div>`}</div>`
+    :(cur&&m.daily>0?`<div class="mini" style="margin-bottom:8px">امروز ${esc(wdName(t0))}${isWork(t0)?'':' (تعطیل)'} · ${am(A,r2(todaySum))} از ${am(A,r2(m.daily))} — ${am(A,r2(Math.max(0,m.daily-todaySum)))} مانده</div>`:'');
+  const form=`<div class="card section"><h2>➕ ثبت معامله</h2>${banner}<form class="form" data-form="gltrade"><div><label>نتیجه</label><select name="kind"><option value="win">سود</option><option value="loss">ضرر</option></select></div><div><label>مبلغ (دلار)</label><input name="amount" type="number" step="any" min="0" required></div>${dateField()}<div><label>یادداشت (اختیاری)</label><input name="note" maxlength="120"></div><div class="full"><button class="btn primary">ثبت</button></div></form></div>`;
+  const cap=`<div class="card section"><div class="row"><span class="mini">سرمایه‌ی حساب (دلار)</span><b>${am(A,r2(eq))}</b></div><form class="form" data-form="flow" style="margin-top:8px"><input type="hidden" name="acc" value="${A}"><div><label>نوع</label><select name="kind"><option value="deposit">واریز</option><option value="withdraw">برداشت</option></select></div><div><label>مبلغ (دلار)</label><input name="amount" type="number" step="any" min="0" required></div>${dateField()}<div><label>توضیح</label><input name="note" placeholder="سرمایه اولیه"></div><div class="full"><button class="btn">ثبت سرمایه</button></div></form><div class="mini" style="margin-top:6px">واریز و برداشت سود حساب نمی‌شود.</div></div>`;
+  const dates=Object.keys(m.by);if(cur&&!m.by[t0])dates.push(t0);
+  dates.sort((a,b)=>b.localeCompare(a));
+  const rows=dates.map(d=>{
+    const g=m.by[d]||{sum:0,list:[]},ok_=dayReached(m,d);
+    return`<div class="tcard" style="border-right:3px solid ${ok_?'var(--g)':'var(--b)'}"><div class="row"><span><b>${ok_?'✅ ':''}${esc(wdName(d))}</b> <span class="mini">${jfmt(d)}${isWork(d)?'':' · تعطیل'}</span></span><b class="${g.sum>=0?'green':'red'}">${g.list.length?am(A,r2(g.sum)):'—'}</b></div>
+${g.list.map(t=>`<div class="row" style="margin-top:6px"><span class="mini">${t.pnl>=0?'سود':'ضرر'}${t.note?' · '+esc(t.note):''}</span><span><b class="${t.pnl>=0?'green':'red'}">${t.pnl>0?'+':''}${am(A,t.pnl)}</b> <button class="btn danger" data-act="delTrade" data-id="${esc(t.id)}">×</button></span></div>`).join('')||'<div class="mini">معامله‌ای ثبت نشده</div>'}</div>`}).join('');
+  const days=`<div class="card section"><h2>📅 روزهای ماه</h2>${rows||'<div class="empty">معامله‌ای ثبت نشده</div>'}</div>`;
+  return rules+goal+form+cap+days;
+}
 function jCap(){
   const opts=ACCS.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
   const asset=esc(S.invest.safe.asset);
-  const units=ACCS.map(a=>`<div class="row" style="margin-top:6px"><span style="color:${a.color}">${esc(a.name)}</span><select data-unit="${a.id}" style="width:auto">${UNITS.map(u=>`<option${u===unitOf(a.id)?' selected':''}>${u}</option>`).join('')}</select></div>`).join('');
+  const units=ACCS.filter(a=>a.id!=='goldlord').map(a=>`<div class="row" style="margin-top:6px"><span style="color:${a.color}">${esc(a.name)}</span><select data-unit="${a.id}" style="width:auto">${UNITS.map(u=>`<option${u===unitOf(a.id)?' selected':''}>${u}</option>`).join('')}</select></div>`).join('');
   const flows=S.flows.slice().sort((p,q)=>q.date.localeCompare(p.date)).slice(0,20).map(f=>`<div class="row todo" style="margin-top:6px"><span><b style="color:${ACC[f.acc].color}">${esc(ACC[f.acc].name)}</b><div class="mini">${jfmt(f.date)} · ${f.kind==='safe'?'انتقال به سرمایه امن':f.amount>0?'واریز':'برداشت'}${f.note&&f.kind!=='safe'?' · '+esc(f.note):''}</div></span><span><b class="${f.amount>0?'green':'red'}">${am(f.acc,Math.abs(f.amount))}</b> ${f.kind==='safe'?'':`<button class="btn danger" data-act="delFlow" data-id="${esc(f.id)}">×</button>`}</span></div>`).join('');
   const slog=S.safeLog.slice().sort((p,q)=>q.date.localeCompare(p.date)).map(s=>`<div class="row todo" style="margin-top:6px"><span><b style="color:${ACC[s.acc].color}">${esc(ACC[s.acc].name)}</b><div class="mini">${jfmt(s.date)} · قیمت ${fmt(s.price)} ${esc(s.unit)}</div></span><span><b class="gold">${fmt(s.amount)} ${esc(s.unit)} → ${fmtQ(s.qty)} ${esc(s.asset)}</b> <button class="btn danger" data-act="delSafe" data-id="${esc(s.id)}">×</button></span></div>`).join('');
   return`<div class="card"><h2>💰 تعیین / تغییر سرمایه</h2><form class="form" data-form="flow"><div class="full"><label>حساب</label><select name="acc">${opts}</select></div><div><label>نوع</label><select name="kind"><option value="deposit">واریز (افزایش سرمایه)</option><option value="withdraw">برداشت</option></select></div>${amountField().replace('مبلغ (تومان)','مبلغ (واحد حساب)')}${dateField()}<div><label>توضیح</label><input name="note" placeholder="سرمایه اولیه"></div><div class="full"><button class="btn primary">ثبت</button></div></form><div class="mini" style="margin-top:6px">اولین واریز هر حساب «سرمایه اولیه» حساب می‌شود. واریز و برداشت سود/زیان محسوب نمی‌شود؛ فقط نتیجه‌ی معاملات.</div>${flows?`<div style="margin-top:10px">${flows}</div>`:''}</div>
 <div class="card section"><h2>🛡 انتقال پایان ماه به سرمایه امن (${asset})</h2><form class="form" data-form="tosafe" id="spf"><div class="full"><label>از حساب</label><select name="acc">${opts}</select></div><div><label>مبنای محاسبه</label><select name="basis"><option value="equity">درصد از سرمایه فعلی</option><option value="monthprofit">درصد از سود این ماه</option><option value="fixed">مبلغ ثابت</option></select></div><div><label>درصد</label><input name="pct" type="number" step="any" min="0" max="100" value="10"></div><div><label>مبلغ ثابت (واحد حساب)</label><input name="amount" type="number" step="any" min="0"></div><div><label>قیمت ۱ ${asset} (واحد حساب)</label><input name="price" type="number" step="any" min="0"></div>${dateField()}<div><label>توضیح</label><input name="note"></div><div class="full item" id="spPrev"></div><div class="full"><button class="btn success">انتقال</button></div></form>${slog?`<div style="margin-top:10px">${slog}</div>`:''}</div>
-<div class="card section"><h2>⚙️ واحد هر حساب</h2>${units}<div class="mini" style="margin-top:6px">تغییر واحد فقط عنوان نمایش را عوض می‌کند و اعداد را تبدیل نمی‌کند.</div></div>`;
+<div class="card section"><h2>⚙️ واحد هر حساب</h2>${units}<div class="mini" style="margin-top:6px">تغییر واحد فقط عنوان نمایش را عوض می‌کند و اعداد را تبدیل نمی‌کند. واحد «طلا (لورد)» همیشه دلار است.</div></div>`;
 }
 function spCompute(fd){
   const id=str(fd.get('acc')),basis=str(fd.get('basis')),pcnt=Math.min(100,Math.max(0,num(fd.get('pct')))),price=num(fd.get('price'));
@@ -820,6 +909,23 @@ const FORMS={
     S.journal.push({id:uid(),acc,src,psym,hit:'',symbol:str(f.get('symbol')).trim(),side,status,entry,exit,size,sl:n(f.get('sl')),tp:n(f.get('tp')),pnl,setup:str(f.get('setup')).trim(),note:str(f.get('note')).trim(),date:d});
     commit('معامله در «'+ACC[acc].name+'» ثبت شد',d);
   },
+  gltrade(f){
+    const a=n(f.get('amount'));if(!(a>0))return toast('مبلغ باید بیشتر از صفر باشد');
+    const d=pdate(f);if(!d)return;
+    const m=glModel(mkey(d));
+    if(dayReached(m,d)&&!S.gl.over[d])return toast('هدف آن روز رسیده و معاملات تمام شده؛ برای ثبت بیشتر، «ثبت معامله‌ی بیشتر» را بزنید');
+    const w=f.get('kind')!=='loss';
+    S.journal.push({id:uid(),acc:'goldlord',src:'',psym:'',hit:'',symbol:'XAU',side:'long',status:'closed',entry:0,exit:0,size:0,sl:0,tp:0,pnl:w?a:-a,setup:'',note:str(f.get('note')).trim().slice(0,120),date:d});
+    lastAcc='goldlord';
+    const m2=glModel(mkey(d));
+    commit((w?'سود':'ضرر')+' ثبت شد'+(dayReached(m2,d)&&!S.gl.over[d]?' · ✅ هدف آن روز رسید':''),d);
+  },
+  glgoal(f){
+    S.gl.goal=Math.max(0,n(f.get('goal')));
+    const dd=Math.round(n(f.get('days')));
+    if(dd>=1&&dd<=31)S.gl.days[S.month]=dd;else delete S.gl.days[S.month];
+    save()&&toast('هدف ذخیره شد');
+  },
   flow(f){
     const acc=ACC[f.get('acc')]?f.get('acc'):'bourse',a=n(f.get('amount'));
     if(!(a>0))return toast('مبلغ باید بیشتر از صفر باشد');
@@ -863,6 +969,7 @@ const FORMS={
     const name=str(f.get('name')).trim().slice(0,40);if(!name)return toast('نام دسته را وارد کنید');
     const src=srcOk(str(f.get('src')))?str(f.get('src')):'binance';
     let sym=str(f.get('symbol')).trim();if(src==='binance')sym=sym.toUpperCase();
+    if(srcFixed(src))sym='_';
     if(sym&&!symOk(src,sym))return toast('نماد نامعتبر است (مثال: BTCUSDT)');
     const c={id:uid(),name,src,symbol:sym,manual:0,manualAt:'',ai:null};
     S.acats.push(c);aCat=c.id;aNew=false;save()&&toast('دسته ساخته شد');
@@ -927,19 +1034,52 @@ const ACTS={
   },
   async srctest(){
     const f=document.querySelector('form[data-form="srcadd"]');if(!f)return;
-    const fd=new FormData(f),cfg=srcFromForm(fd,true);if(typeof cfg==='string')return toast(cfg);
+    const out=$('srcOut'),fd=new FormData(f),cfg=srcFromForm(fd,true);
+    if(typeof cfg==='string'){if(out)out.textContent=cfg;return toast(cfg)}
     const sym=str(fd.get('test')).trim();
-    if(cfg.url.includes('{symbol}')&&!sym)return toast('نماد تست را وارد کنید');
-    toast('در حال تست…');
-    const p=await fetchQ('__test',sym,cfg);
-    toast(p?'قیمت دریافتی: '+fp(p):'پاسخ معتبر نگرفتیم؛ آدرس، مسیر JSON یا CORS را بررسی کنید');
+    if(usesSym(cfg)&&!sym){if(out)out.textContent='نماد تست را وارد کنید';return toast('نماد تست را وارد کنید')}
+    if(out)out.textContent='در حال تست…';
+    const r=await probeSrc(cfg,sym||'_');
+    const msg=r.p>0?`✓ قیمت دریافتی: ${fp(r.p)}${r.raw!==undefined&&String(r.p)!==r.raw?'  (مقدار خام API: '+r.raw+')':''}`:'✗ '+r.msg;
+    if(out)out.textContent=msg;
+    toast(r.p>0?'قیمت دریافتی: '+fp(r.p):'تست ناموفق؛ علت زیر فرم نوشته شده');
+  },
+  srcpreset(d){
+    const p=PRESETS[d.preset],f=document.querySelector('form[data-form="srcadd"]');if(!p||!f)return;
+    f.elements.name.value=p.name;f.elements.url.value=p.url;f.elements.path.value=p.path;f.elements.mult.value=p.mult;f.elements.test.value=p.test;f.elements.hName.value='';
+    const out=$('srcOut');if(out)out.textContent=p.note;
+    f.elements.hVal.focus();
+  },
+  async tsesearch(){
+    const q=str($('tseq')&&$('tseq').value).trim(),out=$('tseOut');if(!out)return;
+    if(q.length<2)return toast('حداقل ۲ حرف از نام نماد را بنویسید');
+    out.textContent='در حال جستجو…';
+    const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),10000);
+    try{
+      const r=await fetch('https://cdn.tsetmc.com/api/Instrument/GetInstrumentSearch/'+encodeURIComponent(q),{signal:ctl.signal});
+      if(!r.ok){out.textContent='پاسخ HTTP '+r.status;return}
+      let j;try{j=await r.json()}catch(e){out.textContent='پاسخ JSON نیست';return}
+      const arr=Array.isArray(j)?j:(j&&(j.instrumentSearch||j.data||j.result||Object.values(j).find(Array.isArray)))||[];
+      const items=arr.filter(o=>o&&typeof o==='object').map(o=>({code:str(o.insCode||o.ins_code||o.id).replace(/\D/g,''),name:str(o.lVal18AFC||o.symbol||o.lVal18||o.name),full:str(o.lVal30||o.fullName||'')})).filter(o=>o.code);
+      if(!items.length){out.textContent='نتیجه‌ای پیدا نشد. '+shapeOf(j);return}
+      out.innerHTML=items.slice(0,15).map(i=>`<button class="btn" data-act="tsepick" data-code="${esc(i.code)}" data-name="${esc(i.name)}">${esc(i.name)} <span class="mini">${esc(i.full)}</span></button>`).join('');
+    }catch(e){out.textContent='اتصال برقرار نشد (شبکه/فیلتر یا CORS؛ در APK مشکل CORS نیست)'}
+    finally{clearTimeout(t)}
+  },
+  async tsepick(d){
+    const code=str(d.code).replace(/\D/g,'');if(!code)return;
+    try{await navigator.clipboard.writeText(code)}catch(e){}
+    const f=document.querySelector('form[data-form="srcadd"]');if(f&&f.elements.test)f.elements.test.value=code;
+    toast('کد '+code+' برای «'+str(d.name)+'» کپی شد');
   },
   async testNotif(){await enableNotif();notify('Finora','اعلان آزمایشی ✓')},
   async exactAlarm(){
     const P=LN();if(!P||!P.checkExactNotificationSetting)return toast('این گزینه فقط در نسخه‌ی اندروید است');
     try{const r=await P.checkExactNotificationSetting();if(r.exact_alarm==='granted')return toast('دقت زمان‌بندی از قبل فعال است');await P.changeExactNotificationSetting()}catch(e){toast('تنظیم ممکن نشد')}
   },
-  jtab(d){jTab=['cmp','trades','cap'].includes(d.t)?d.t:'cmp';render()},
+  glrules(){const el=$('glRules');if(!el)return;S.gl.rules=str(el.value).slice(0,3000);save()&&toast('قوانین ذخیره شد')},
+  glover(d){if(ISO_RE.test(str(d.d))){S.gl.over[d.d]=true;save()}},
+  jtab(d){jTab=['cmp','gl','trades','cap'].includes(d.t)?d.t:'cmp';render()},
   jacc(d){jAcc=d.a==='all'||ACC[d.a]?d.a:'all';render()},
   delFlow(d){
     const f=S.flows.find(x=>x.id===d.id);if(!f||f.kind==='safe')return;
@@ -976,7 +1116,7 @@ const ACTS={
       const hit=all.find(x=>x.name.toLowerCase()===sn.trim().toLowerCase());if(!hit)return toast('منبع پیدا نشد');src=hit.id;
     }
     const sy=prompt('نماد در منبع (خالی = بدون قیمت لایو)',c.symbol);if(sy===null)return;
-    const sym=src==='binance'?sy.trim().toUpperCase():sy.trim();if(sym&&!symOk(src,sym))return toast('نماد نامعتبر است');
+    let sym=src==='binance'?sy.trim().toUpperCase():sy.trim();if(srcFixed(src)&&sym)sym='_';if(sym&&!symOk(src,sym))return toast('نماد نامعتبر است');
     c.name=nm.trim().slice(0,40);c.src=src;c.symbol=sym;save();
   },
   delCat(){
